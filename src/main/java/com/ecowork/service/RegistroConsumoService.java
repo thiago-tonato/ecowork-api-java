@@ -5,8 +5,10 @@ import com.ecowork.dto.registro.RegistroConsumoResponseDTO;
 import com.ecowork.exception.NotFoundException;
 import com.ecowork.mapper.RegistroConsumoMapper;
 import com.ecowork.models.*;
+import com.ecowork.models.enums.TipoConsumo;
 import com.ecowork.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -53,5 +55,43 @@ public class RegistroConsumoService {
             case PAPEL -> r.getValor().multiply(java.math.BigDecimal.valueOf(3)).intValue();
             case TRANSPORTE -> r.getValor().intValue();
         };
+    }
+
+    public RegistroConsumoResponseDTO buscarPorId(Long id) {
+        RegistroConsumo r = registroRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Registro não encontrado."));
+        return RegistroConsumoMapper.toDTO(r);
+    }
+
+    public Page<RegistroConsumoResponseDTO> listarTodos(int pagina, int tamanho) {
+        Page<RegistroConsumo> page = registroRepository.findAll(PageRequest.of(pagina, tamanho));
+        return page.map(RegistroConsumoMapper::toDTO);
+    }
+
+    public Page<RegistroConsumoResponseDTO> listarPorUsuario(Long usuarioId, int pagina, int tamanho) {
+        Usuario usuario = usuarioRepository.findById(usuarioId)
+                .orElseThrow(() -> new NotFoundException("Usuário não encontrado."));
+
+        Page<RegistroConsumo> page = registroRepository.findByUsuario(
+                usuario,
+                PageRequest.of(pagina, tamanho)
+        );
+
+        return page.map(RegistroConsumoMapper::toDTO);
+    }
+
+    public Page<RegistroConsumoResponseDTO> listarPorTipo(TipoConsumo tipo, int pagina, int tamanho) {
+        Page<RegistroConsumo> page = registroRepository.findByTipo(
+                tipo,
+                PageRequest.of(pagina, tamanho)
+        );
+
+        return page.map(RegistroConsumoMapper::toDTO);
+    }
+
+    public void deletar(Long id) {
+        RegistroConsumo r = registroRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Registro não encontrado."));
+        registroRepository.delete(r);
     }
 }

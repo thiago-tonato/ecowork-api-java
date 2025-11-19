@@ -3,9 +3,11 @@ package com.ecowork.service;
 import com.ecowork.dto.empresa.EmpresaCreateDTO;
 import com.ecowork.dto.empresa.EmpresaResponseDTO;
 import com.ecowork.dto.empresa.EmpresaUpdateDTO;
+import com.ecowork.dto.usuario.UsuarioEmpresaListDTO;
 import com.ecowork.exception.NotFoundException;
 import com.ecowork.mapper.EmpresaMapper;
 import com.ecowork.models.Empresa;
+import com.ecowork.models.Usuario;
 import com.ecowork.repository.EmpresaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -52,5 +54,23 @@ public class EmpresaService {
         Empresa empresa = empresaRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Empresa não encontrada."));
         empresaRepository.delete(empresa);
+    }
+
+    /**
+     * Novo método: lista funcionários da empresa.
+     */
+    public List<UsuarioEmpresaListDTO> listarUsuarios(Long empresaId) {
+        Empresa empresa = empresaRepository.findById(empresaId)
+                .orElseThrow(() -> new NotFoundException("Empresa não encontrada."));
+
+        List<Usuario> usuarios = empresa.getUsuarios();
+
+        return usuarios.stream()
+                .map(u -> UsuarioEmpresaListDTO.builder()
+                        .id(u.getId())
+                        .nome(u.getNome())
+                        .email(u.getEmail())
+                        .build())
+                .toList();
     }
 }

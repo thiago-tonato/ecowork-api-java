@@ -11,4 +11,5 @@ public class RankingUsuarioDTO {
     private String nome;
     private Integer pontosTotais;
     private String empresa;
+    private Integer posicao;
 }
