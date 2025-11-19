@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -20,25 +21,47 @@ public class RankingService {
     private final AuthUtils authUtils;
 
     public List<RankingUsuarioDTO> rankingGlobal() {
-        return usuarioRepository.findAll()
+
+        List<Usuario> ordenados = usuarioRepository.findAll()
                 .stream()
                 .sorted(Comparator.comparingInt(Usuario::getPontosTotais).reversed())
-                .map(this::toRankingDTO)
+                .toList();
+
+        AtomicInteger posicao = new AtomicInteger(1);
+
+        return ordenados.stream()
+                .map(u -> RankingUsuarioDTO.builder()
+                        .usuarioId(u.getId())
+                        .nome(u.getNome())
+                        .empresa(u.getEmpresa().getNome())
+                        .pontosTotais(u.getPontosTotais())
+                        .posicao(posicao.getAndIncrement())
+                        .build())
                 .toList();
     }
 
     public List<RankingUsuarioDTO> rankingPorEmpresa(Long empresaId) {
 
-        return usuarioRepository.findAll()
+        List<Usuario> ordenados = usuarioRepository.findAll()
                 .stream()
                 .filter(u -> u.getEmpresa().getId().equals(empresaId))
                 .sorted(Comparator.comparingInt(Usuario::getPontosTotais).reversed())
-                .map(this::toRankingDTO)
+                .toList();
+
+        AtomicInteger posicao = new AtomicInteger(1);
+
+        return ordenados.stream()
+                .map(u -> RankingUsuarioDTO.builder()
+                        .usuarioId(u.getId())
+                        .nome(u.getNome())
+                        .empresa(u.getEmpresa().getNome())
+                        .pontosTotais(u.getPontosTotais())
+                        .posicao(posicao.getAndIncrement())
+                        .build())
                 .toList();
     }
 
     public RankingUsuarioDTO posicaoUsuarioLogado() {
-
         Usuario u = authUtils.getUsuarioLogado();
         return posicaoUsuario(u.getId());
     }
@@ -61,15 +84,6 @@ public class RankingService {
                 .nome(usuario.getNome())
                 .pontosTotais(usuario.getPontosTotais())
                 .posicao(posicao)
-                .build();
-    }
-
-    private RankingUsuarioDTO toRankingDTO(Usuario u) {
-        return RankingUsuarioDTO.builder()
-                .usuarioId(u.getId())
-                .nome(u.getNome())
-                .empresa(u.getEmpresa().getNome())
-                .pontosTotais(u.getPontosTotais())
                 .build();
     }
 }

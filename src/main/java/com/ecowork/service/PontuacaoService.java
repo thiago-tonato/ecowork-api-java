@@ -1,9 +1,8 @@
 package com.ecowork.service;
 
-import com.ecowork.dto.pontos.PontuacaoResponseDTO;
-import com.ecowork.mapper.PontuacaoMapper;
 import com.ecowork.models.Pontuacao;
 import com.ecowork.models.Usuario;
+import com.ecowork.models.enums.TipoPonto;
 import com.ecowork.repository.PontuacaoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,11 +21,13 @@ public class PontuacaoService {
                 .usuario(usuario)
                 .quantidade(pontos)
                 .data(LocalDateTime.now())
-                .tipo(null)
+                .tipo(TipoPonto.AUTOMATICO)
                 .build();
 
         pontuacaoRepository.save(p);
 
-        usuario.setPontosTotais(usuario.getPontosTotais() + pontos);
+        usuario.setPontosTotais(
+                (usuario.getPontosTotais() == null ? 0 : usuario.getPontosTotais()) + pontos
+        );
     }
 }
