@@ -1,0 +1,117 @@
+trigger:
+  branches:
+    include:
+      - main
+      - master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+- group: ecowork-ci-variables
+
+steps:
+
+# ---------------------------------------------------------
+# CHECKOUT
+# ---------------------------------------------------------
+- task: Checkout@1
+  displayName: "Checkout repository"
+
+# ---------------------------------------------------------
+# MAVEN BUILD + TEST
+# ---------------------------------------------------------
+- task: Maven@3
+  displayName: "Build and Test with Maven"
+  inputs:
+    mavenPomFile: "pom.xml"
+    goals: "clean package"
+    options: "-DskipTests=false"
+    publishJUnitResults: true
+    testResultsFiles: "**/surefire-reports/*.xml"
+    javaHomeOption: "JDKVersion"
+    jdkVersionOption: "1.17"
+    mavenOptions: "-Xmx3072m"
+    mavenSetM2Home: false
+
+# ---------------------------------------------------------
+# ACR LOGIN
+# ---------------------------------------------------------
+- task: Docker@2
+  displayName: "Login to ACR"
+  inputs:
+    command: login
+    containerRegistry: "$(ACR_SERVICE_CONNECTION)"   # Service connection in DevOps
+    azureSubscriptionEndpoint: ""
+
+# ---------------------------------------------------------
+# DOCKER BUILD
+# ---------------------------------------------------------
+- task: Docker@2
+  displayName: "Build API Docker Image"
+  inputs:
+    command: build
+    repository: "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME)"
+    Dockerfile: "Dockerfile"
+    tags: |
+      $(Build.BuildId)
+      latest
+
+# ---------------------------------------------------------
+# DOCKER PUSH
+# ---------------------------------------------------------
+- task: Docker@2
+  displayName: "Push API Images to ACR"
+  inputs:
+    command: push
+    repository: "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME)"
+    tags: |
+      $(Build.BuildId)
+      latest
+
+# ---------------------------------------------------------
+# AZ LOGIN
+# ---------------------------------------------------------
+- task: AzureCLI@2
+  displayName: "Login Azure CLI"
+  inputs:
+    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+    scriptType: bash
+    scriptLocation: inlineScript: |
+      echo "Logged into Azure."
+
+# ---------------------------------------------------------
+# DEPLOY APPLICATION CONTAINER INSTANCE
+# ---------------------------------------------------------
+- task: AzureCLI@2
+  displayName: "Deploy API to Container Instance"
+  inputs:
+    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
+    scriptType: bash
+    scriptLocation: inlineScript: |
+
+      echo "Creating/Updating Container Instance for API..."
+
+      az container create \
+        --resource-group "$(RG)" \
+        --name "$(API_CONTAINER_NAME)" \
+        --image "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME):$(Build.BuildId)" \
+        --cpu 1 \
+        --memory 1.5 \
+        --dns-name-label "$(API_DNS_LABEL)" \
+        --ports 8080 \
+        --ip-address Public \
+        --registry-login-server "$(ACR_NAME).azurecr.io" \
+        --registry-username "$(ACR_USERNAME)" \
+        --registry-password "$(ACR_PASSWORD)" \
+        --environment-variables \
+            POSTGRES_HOST="$(POSTGRES_HOST)" \
+            POSTGRES_PORT="$(POSTGRES_PORT)" \
+            POSTGRES_DB="$(POSTGRES_DB)" \
+            POSTGRES_USER="$(POSTGRES_USER)" \
+            POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" \
+        --query "{FQDN:ipAddress.fqdn,IP:ipAddress.ip}" \
+        --output table
+
+      echo "API deployment completed."
+

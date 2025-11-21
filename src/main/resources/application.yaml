@@ -1,40 +1,36 @@
+server:
+  port: 8080
+
 spring:
   application:
-    name: ecowork
+    name: ecowork-api
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/ecowork
-    username: postgres
-    password: admin123
+    url: jdbc:postgresql://${POSTGRES_HOST:${DB_HOST}}:${POSTGRES_PORT:${DB_PORT:5432}}/${POSTGRES_DB:${DB_NAME}}
+    username: ${POSTGRES_USER:${DB_USER:postgres}}
+    password: ${POSTGRES_PASSWORD:${DB_PASSWORD}}
+    driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: none
-    show-sql: true
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+    show-sql: true
 
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    locations: classpath:db/migration
-    connect-retries: 5
-
-  messages:
-    basename: messages
-
-  mvc:
-    locale: pt_BR
-    locale-resolver: accept-header
-
-  cache:
-    type: caffeine
-
-jwt:
-  secret: "98Bdjw92hDla7Ahs82nBsiQpqowXpqLZ0092nzmaSLLQpqowmznvllaasdns001"
-  expiration: 86400000
+  jackson:
+    serialization:
+      indent_output: true
 
 logging:
   level:
-    org.springframework: INFO
+    root: INFO
+    org.springframework.web: INFO
+    com.ecowork: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
