@@ -53,6 +53,8 @@ az container create \
     --environment-variables POSTGRES_PASSWORD=$DB_ADMIN_PASSWORD POSTGRES_DB=$DB_NAME \
     --dns-name-label $DNS_LABEL \
     --ports 5432 \
-    --os-type Linux
+    --os-type Linux \
+    --cpu 1 \
+    --memory 1.5
 
 echo "🎉 Infraestrutura criada com sucesso!"
