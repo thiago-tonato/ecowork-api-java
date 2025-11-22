@@ -9,9 +9,9 @@ set -e
 RG="ecowork-rg"
 LOCATION="eastus"
 ACR_NAME="ecoworkacr"
-DB_IMAGE_NAME="ecowork-postgres"
-DB_IMAGE_TAG="v1"
+POSTGRES_IMAGE="postgres:15"
 DB_CONTAINER_NAME="ecoworkdb"
+DB_ADMIN_USER="postgres"
 DB_ADMIN_PASSWORD="ecoworkFIAP!"
 DB_NAME="ecoworkdb"
 DNS_LABEL="ecowork-api"
@@ -30,27 +30,13 @@ az acr create \
     --sku Basic \
     --admin-enabled true
 
-echo "🔐 Obtendo token para o ACR..."
-TOKEN=$(az acr login -n $ACR_NAME --expose-token --query accessToken -o tsv)
-
-echo "🔐 Fazendo login no ACR com token..."
-docker login $ACR_NAME.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $TOKEN
-
-echo "📄 Construindo imagem do banco de dados..."
-az acr build \
-    --registry $ACR_NAME \
-    --image "$DB_IMAGE_NAME:$DB_IMAGE_TAG" \
-    .
-
 echo "🐳 Criando Container Instance com PostgreSQL..."
 az container create \
     --resource-group $RG \
     --name $DB_CONTAINER_NAME \
-    --image "$ACR_NAME.azurecr.io/$DB_IMAGE_NAME:$DB_IMAGE_TAG" \
-    --registry-login-server "$ACR_NAME.azurecr.io" \
-    --registry-username $(az acr credential show --name $ACR_NAME --query username -o tsv) \
-    --registry-password $(az acr credential show --name $ACR_NAME --query passwords[0].value -o tsv) \
-    --environment-variables POSTGRES_PASSWORD=$DB_ADMIN_PASSWORD POSTGRES_DB=$DB_NAME \
+    --image $POSTGRES_IMAGE \
+    --ip-address Public \
+    --environment-variables POSTGRES_PASSWORD=$DB_ADMIN_PASSWORD POSTGRES_DB=$DB_NAME POSTGRES_USER=$DB_ADMIN_USER \
     --dns-name-label $DNS_LABEL \
     --ports 5432 \
     --os-type Linux \
