@@ -8,16 +8,13 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-
-  # Mesmos valores do infra.sh
   RG: "ecowork-rg"
   LOCATION: "eastus"
   ACR_NAME: "ecoworkacr"
   API_IMAGE_NAME: "ecowork-api"
   API_CONTAINER_NAME: "ecoworkapi"
   API_DNS_LABEL: "ecowork-api"
-  
-  # Banco (usado pela API)
+
   POSTGRES_HOST: "ecoworkdb.eastus.azurecontainer.io"
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "ecoworkdb"
@@ -26,16 +23,11 @@ variables:
 
 steps:
 
-# ---------------------------------------------------------
-# CHECKOUT
-# ---------------------------------------------------------
+# 1. CHECKOUT
 - task: Checkout@1
   displayName: "Checkout repository"
 
-
-# ---------------------------------------------------------
-# MAVEN BUILD + TEST
-# ---------------------------------------------------------
+# 2. MAVEN BUILD + TEST
 - task: Maven@3
   displayName: "Build and Test with Maven"
   inputs:
@@ -47,22 +39,15 @@ steps:
     javaHomeOption: "JDKVersion"
     jdkVersionOption: "1.17"
     mavenOptions: "-Xmx3072m"
-    mavenSetM2Home: false
 
-
-# ---------------------------------------------------------
-# ACR LOGIN
-# ---------------------------------------------------------
+# 3. ACR LOGIN
 - task: Docker@2
   displayName: "Login to ACR"
   inputs:
     command: login
     containerRegistry: "$(ACR_SERVICE_CONNECTION)"
 
-
-# ---------------------------------------------------------
-# DOCKER BUILD
-# ---------------------------------------------------------
+# 4. DOCKER BUILD
 - task: Docker@2
   displayName: "Build API Docker Image"
   inputs:
@@ -73,10 +58,7 @@ steps:
       $(Build.BuildId)
       latest
 
-
-# ---------------------------------------------------------
-# DOCKER PUSH
-# ---------------------------------------------------------
+# 5. DOCKER PUSH
 - task: Docker@2
   displayName: "Push API Images to ACR"
   inputs:
@@ -86,22 +68,26 @@ steps:
       $(Build.BuildId)
       latest
 
-
-# ---------------------------------------------------------
-# AZ LOGIN
-# ---------------------------------------------------------
+# 6. RUN MIGRATIONS
 - task: AzureCLI@2
-  displayName: "Login Azure CLI"
+  displayName: "Run Flyway Migrations"
   inputs:
     azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
     scriptType: bash
     scriptLocation: inlineScript: |
-      echo "Logged into Azure."
 
+      echo "Running Flyway migrations before deploy..."
 
-# ---------------------------------------------------------
-# DEPLOY API (CONTAINER INSTANCE)
-# ---------------------------------------------------------
+      docker run --rm \
+        -e POSTGRES_HOST="$(POSTGRES_HOST)" \
+        -e POSTGRES_PORT="$(POSTGRES_PORT)" \
+        -e POSTGRES_DB="$(POSTGRES_DB)" \
+        -e POSTGRES_USER="$(POSTGRES_USER)" \
+        -e POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" \
+        "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME):$(Build.BuildId)" \
+        org.flywaydb.core.Flyway migrate
+
+# 7. DEPLOY APP
 - task: AzureCLI@2
   displayName: "Deploy API to Container Instance"
   inputs:
@@ -109,7 +95,7 @@ steps:
     scriptType: bash
     scriptLocation: inlineScript: |
 
-      echo "Creating/Updating API Container Instance..."
+      echo "Deploying API..."
 
       az container create \
         --resource-group "$(RG)" \
@@ -128,8 +114,4 @@ steps:
             POSTGRES_PORT="$(POSTGRES_PORT)" \
             POSTGRES_DB="$(POSTGRES_DB)" \
             POSTGRES_USER="$(POSTGRES_USER)" \
-            POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" \
-        --query "{FQDN:ipAddress.fqdn,IP:ipAddress.ip}" \
-        --output table
-
-      echo "API deployment completed."
+            POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)"
