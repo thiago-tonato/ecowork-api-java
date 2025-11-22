@@ -1,8 +1,8 @@
 trigger:
   branches:
     include:
-      - main
       - master
+      - main
 
 pool:
   vmImage: 'ubuntu-latest'
@@ -15,103 +15,180 @@ variables:
   API_CONTAINER_NAME: "ecoworkapi"
   API_DNS_LABEL: "ecowork-api"
 
-  POSTGRES_HOST: "ecoworkdb.eastus.azurecontainer.io"
-  POSTGRES_PORT: "5432"
-  POSTGRES_DB: "ecoworkdb"
-  POSTGRES_USER: "postgres"
-  POSTGRES_PASSWORD: "ecoworkFIAP!"
+  MYSQL_DATABASE: "ecoworkdb"
+  MYSQL_USER: "ecowork-user"
+  MYSQL_PASSWORD: "ecoworkFIAP!"
+  MYSQL_ROOT_PASSWORD: "FIAP@2tdspy!"
+  MYSQL_CONTAINER_NAME: "ecowork-mysql"
 
-steps:
+stages:
+  - stage: Build
+    displayName: 'Build e Testes'
+    jobs:
+      - job: Build
+        steps:
+          - checkout: self
 
-# 1. CHECKOUT
-- task: Checkout@1
-  displayName: "Checkout repository"
+          - task: JavaToolInstaller@0
+            inputs:
+              versionSpec: '17'
+              jdkArchitectureOption: 'x64'
+              jdkSourceOption: 'PreInstalled'
 
-# 2. MAVEN BUILD + TEST
-- task: Maven@3
-  displayName: "Build and Test with Maven"
-  inputs:
-    mavenPomFile: "pom.xml"
-    goals: "clean package"
-    options: "-DskipTests=false"
-    publishJUnitResults: true
-    testResultsFiles: "**/surefire-reports/*.xml"
-    javaHomeOption: "JDKVersion"
-    jdkVersionOption: "1.17"
-    mavenOptions: "-Xmx3072m"
+          - task: Maven@3
+            displayName: 'Compilar e Testar'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean test'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-# 3. ACR LOGIN
-- task: Docker@2
-  displayName: "Login to ACR"
-  inputs:
-    command: login
-    containerRegistry: "$(ACR_SERVICE_CONNECTION)"
+  - stage: ContainerImage
+    displayName: 'Build da Imagem no ACR'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - job: BuildContainerImage
+        steps:
+          - checkout: self
+          - task: AzureCLI@2
+            displayName: 'Buildar imagem no ACR'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $ErrorActionPreference = 'Stop'
+                $imageTag = "$(Build.BuildId)"
+                Write-Host "Buildando imagem $(API_IMAGE_NAME):$imageTag e latest no ACR $(ACR_NAME)..."
+                az acr build `
+                  --registry "$(ACR_NAME)" `
+                  --image "$(API_IMAGE_NAME):$imageTag" `
+                  --image "$(API_IMAGE_NAME):latest" `
+                  .
 
-# 4. DOCKER BUILD
-- task: Docker@2
-  displayName: "Build API Docker Image"
-  inputs:
-    command: build
-    repository: "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME)"
-    Dockerfile: "Dockerfile"
-    tags: |
-      $(Build.BuildId)
-      latest
+  - stage: Deploy
+    displayName: 'Deploy'
+    dependsOn: ContainerImage
+    condition: succeeded()
+    jobs:
+      - deployment: Deploy
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: AzureCLI@2
+                  displayName: 'Criar ou atualizar container group'
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $ErrorActionPreference = 'Stop'
 
-# 5. DOCKER PUSH
-- task: Docker@2
-  displayName: "Push API Images to ACR"
-  inputs:
-    command: push
-    repository: "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME)"
-    tags: |
-      $(Build.BuildId)
-      latest
+                      function Require($value, $name) {
+                        if ([string]::IsNullOrWhiteSpace($value)) {
+                          Write-Error "Variável $name não definida no pipeline."
+                        }
+                        return $value
+                      }
 
-# 6. RUN MIGRATIONS
-- task: AzureCLI@2
-  displayName: "Run Flyway Migrations"
-  inputs:
-    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
-    scriptType: bash
-    scriptLocation: inlineScript: |
+                      $resourceGroup = "$(RG)"
+                      $location = "$(LOCATION)"
+                      $containerGroup = "$(API_CONTAINER_NAME)"
+                      $acrName = "$(ACR_NAME)"
+                      $appImageRepo = "$(API_IMAGE_NAME)"
+                      $appContainerName = "$(API_CONTAINER_NAME)"
+                      $mysqlContainerName = "$(MYSQL_CONTAINER_NAME)"
+                      $mysqlDatabase = "$(MYSQL_DATABASE)"
+                      $mysqlUser = "$(MYSQL_USER)"
+                      $mysqlPassword = "$(MYSQL_PASSWORD)"
+                      $mysqlRootPassword = "$(MYSQL_ROOT_PASSWORD)"
+                      $dnsLabel = "$(API_DNS_LABEL)"
 
-      echo "Running Flyway migrations before deploy..."
+                      $loginServer = az acr show --name $acrName --query loginServer -o tsv
+                      $imageTag = "$(Build.BuildId)"
+                      $appImageFull = "$loginServer/$appImageRepo:$imageTag"
+                      $mysqlImageFull = "$loginServer/mysql:latest"
 
-      docker run --rm \
-        -e POSTGRES_HOST="$(POSTGRES_HOST)" \
-        -e POSTGRES_PORT="$(POSTGRES_PORT)" \
-        -e POSTGRES_DB="$(POSTGRES_DB)" \
-        -e POSTGRES_USER="$(POSTGRES_USER)" \
-        -e POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)" \
-        "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME):$(Build.BuildId)" \
-        org.flywaydb.core.Flyway migrate
+                      # Import MySQL se não existir
+                      $tagExists = az acr repository show-tags --name $acrName --repository "mysql" --query "contains(@, 'latest')" -o tsv 2>$null
+                      if ($tagExists -ne 'true') {
+                        az acr import --name $acrName --source "docker.io/library/mysql:latest" --image "mysql:latest"
+                      }
 
-# 7. DEPLOY APP
-- task: AzureCLI@2
-  displayName: "Deploy API to Container Instance"
-  inputs:
-    azureSubscription: "$(AZURE_SERVICE_CONNECTION)"
-    scriptType: bash
-    scriptLocation: inlineScript: |
+                      # Credenciais ACR
+                      $acrUsername = az acr credential show --name $acrName --query username -o tsv
+                      $acrPassword = az acr credential show --name $acrName --query passwords[0].value -o tsv
 
-      echo "Deploying API..."
+                      # Remover container group existente
+                      $exists = az container show --resource-group $resourceGroup --name $containerGroup >$null 2>&1
+                      if ($LASTEXITCODE -eq 0) {
+                        az container delete --resource-group $resourceGroup --name $containerGroup --yes
+                        Write-Host 'Aguardando remoção...'
+                        do { Start-Sleep -Seconds 5; az container show --resource-group $resourceGroup --name $containerGroup >$null 2>&1 } while ($LASTEXITCODE -eq 0)
+                      }
 
-      az container create \
-        --resource-group "$(RG)" \
-        --name "$(API_CONTAINER_NAME)" \
-        --image "$(ACR_NAME).azurecr.io/$(API_IMAGE_NAME):$(Build.BuildId)" \
-        --cpu 1 \
-        --memory 1.5 \
-        --dns-name-label "$(API_DNS_LABEL)" \
-        --ports 8080 \
-        --ip-address Public \
-        --registry-login-server "$(ACR_NAME).azurecr.io" \
-        --registry-username "$(ACR_USERNAME)" \
-        --registry-password "$(ACR_PASSWORD)" \
-        --environment-variables \
-            POSTGRES_HOST="$(POSTGRES_HOST)" \
-            POSTGRES_PORT="$(POSTGRES_PORT)" \
-            POSTGRES_DB="$(POSTGRES_DB)" \
-            POSTGRES_USER="$(POSTGRES_USER)" \
-            POSTGRES_PASSWORD="$(POSTGRES_PASSWORD)"
+                      # Configurar containers
+                      $springDatasourceUrl = "jdbc:mysql://127.0.0.1:3306/$mysqlDatabase?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+
+                      $appContainer = @{ 
+                        name = $appContainerName
+                        properties = @{ 
+                          image = $appImageFull
+                          ports = @(@{ port = 8080 })
+                          environmentVariables = @(
+                            @{ name = 'SERVER_PORT'; value = '8080' },
+                            @{ name = 'DB_HOST'; value = '127.0.0.1' },
+                            @{ name = 'DB_PORT'; value = '3306' },
+                            @{ name = 'SPRING_DATASOURCE_URL'; value = $springDatasourceUrl },
+                            @{ name = 'SPRING_DATASOURCE_USERNAME'; value = $mysqlUser },
+                            @{ name = 'SPRING_DATASOURCE_PASSWORD'; secureValue = $mysqlPassword },
+                            @{ name = 'JAVA_OPTS'; value = '-Xms256m -Xmx512m' }
+                          )
+                          resources = @{ requests = @{ cpu = 1.0; memoryInGB = 1.5 } }
+                        }
+                      }
+
+                      $mysqlContainer = @{ 
+                        name = $mysqlContainerName
+                        properties = @{ 
+                          image = $mysqlImageFull
+                          ports = @(@{ port = 3306 })
+                          environmentVariables = @(
+                            @{ name = 'MYSQL_DATABASE'; value = $mysqlDatabase },
+                            @{ name = 'MYSQL_USER'; value = $mysqlUser },
+                            @{ name = 'MYSQL_PASSWORD'; secureValue = $mysqlPassword },
+                            @{ name = 'MYSQL_ROOT_PASSWORD'; secureValue = $mysqlRootPassword },
+                            @{ name = 'MYSQL_ROOT_HOST'; value = '%' }
+                          )
+                          resources = @{ requests = @{ cpu = 1.0; memoryInGB = 1.5 } }
+                        }
+                      }
+
+                      $templateObject = @{ 
+                        name = $containerGroup
+                        location = $location
+                        properties = @{ 
+                          containers = @($appContainer, $mysqlContainer)
+                          osType = 'Linux'
+                          restartPolicy = 'Always'
+                          imageRegistryCredentials = @(@{ server = $loginServer; username = $acrUsername; password = $acrPassword })
+                          ipAddress = @{ 
+                            type = 'Public'
+                            dnsNameLabel = $dnsLabel
+                            ports = @(@{ protocol = 'TCP'; port = 8080 }, @{ protocol = 'TCP'; port = 3306 })
+                          }
+                        }
+                      }
+
+                      $templateJson = $templateObject | ConvertTo-Json -Depth 6
+                      $tempFile = New-TemporaryFile
+                      $templateJson | Out-File -FilePath $tempFile -Encoding utf8
+                      try { az container create --resource-group $resourceGroup --file $tempFile | Out-Null }
+                      finally { Remove-Item $tempFile -Force }
+
+                      Write-Host "Container group $containerGroup criado com sucesso."
+                      Write-Host "Aplicação acessível em: http://$dnsLabel.$location.azurecontainer.io:8080"
