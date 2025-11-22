@@ -8,7 +8,21 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-- group: ecowork-ci-variables
+
+  # Mesmos valores do infra.sh
+  RG: "ecowork-rg"
+  LOCATION: "eastus"
+  ACR_NAME: "ecoworkacr"
+  API_IMAGE_NAME: "ecowork-api"
+  API_CONTAINER_NAME: "ecoworkapi"
+  API_DNS_LABEL: "ecowork-api"
+  
+  # Banco (usado pela API)
+  POSTGRES_HOST: "ecoworkdb.eastus.azurecontainer.io"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "ecoworkdb"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PASSWORD: "ecoworkFIAP!"
 
 steps:
 
@@ -17,6 +31,7 @@ steps:
 # ---------------------------------------------------------
 - task: Checkout@1
   displayName: "Checkout repository"
+
 
 # ---------------------------------------------------------
 # MAVEN BUILD + TEST
@@ -34,6 +49,7 @@ steps:
     mavenOptions: "-Xmx3072m"
     mavenSetM2Home: false
 
+
 # ---------------------------------------------------------
 # ACR LOGIN
 # ---------------------------------------------------------
@@ -41,8 +57,8 @@ steps:
   displayName: "Login to ACR"
   inputs:
     command: login
-    containerRegistry: "$(ACR_SERVICE_CONNECTION)"   # Service connection in DevOps
-    azureSubscriptionEndpoint: ""
+    containerRegistry: "$(ACR_SERVICE_CONNECTION)"
+
 
 # ---------------------------------------------------------
 # DOCKER BUILD
@@ -57,6 +73,7 @@ steps:
       $(Build.BuildId)
       latest
 
+
 # ---------------------------------------------------------
 # DOCKER PUSH
 # ---------------------------------------------------------
@@ -69,6 +86,7 @@ steps:
       $(Build.BuildId)
       latest
 
+
 # ---------------------------------------------------------
 # AZ LOGIN
 # ---------------------------------------------------------
@@ -80,8 +98,9 @@ steps:
     scriptLocation: inlineScript: |
       echo "Logged into Azure."
 
+
 # ---------------------------------------------------------
-# DEPLOY APPLICATION CONTAINER INSTANCE
+# DEPLOY API (CONTAINER INSTANCE)
 # ---------------------------------------------------------
 - task: AzureCLI@2
   displayName: "Deploy API to Container Instance"
@@ -90,7 +109,7 @@ steps:
     scriptType: bash
     scriptLocation: inlineScript: |
 
-      echo "Creating/Updating Container Instance for API..."
+      echo "Creating/Updating API Container Instance..."
 
       az container create \
         --resource-group "$(RG)" \
@@ -114,4 +133,3 @@ steps:
         --output table
 
       echo "API deployment completed."
-
