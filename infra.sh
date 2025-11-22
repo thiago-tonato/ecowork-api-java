@@ -30,8 +30,11 @@ az acr create \
     --sku Basic \
     --admin-enabled true
 
-echo "🔐 Obtendo login no ACR..."
-az acr login --name $ACR_NAME
+echo "🔐 Obtendo token para o ACR..."
+TOKEN=$(az acr login -n $ACR_NAME --expose-token --query accessToken -o tsv)
+
+echo "🔐 Fazendo login no ACR com token..."
+docker login $ACR_NAME.azurecr.io -u 00000000-0000-0000-0000-000000000000 -p $TOKEN
 
 echo "📄 Construindo imagem do banco de dados..."
 az acr build \
