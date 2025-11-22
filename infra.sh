@@ -10,10 +10,6 @@
 # DB_CONTAINER_NAME, DB_ADMIN_PASSWORD, DB_NAME, DNS_LABEL
 
 # ---------------------------------------------------------
-echo "🔐 Logging in to Azure..."
-az login --identity --allow-no-subscriptions --output none
-
-# ---------------------------------------------------------
 echo "📦 Creating Resource Group..."
 az group create \
   --name "$RG" \
