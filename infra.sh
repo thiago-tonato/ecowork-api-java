@@ -52,6 +52,7 @@ az container create \
     --registry-password $(az acr credential show --name $ACR_NAME --query passwords[0].value -o tsv) \
     --environment-variables POSTGRES_PASSWORD=$DB_ADMIN_PASSWORD POSTGRES_DB=$DB_NAME \
     --dns-name-label $DNS_LABEL \
-    --ports 5432
+    --ports 5432 \
+    --os-type Linux
 
 echo "🎉 Infraestrutura criada com sucesso!"
