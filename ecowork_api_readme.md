@@ -3,19 +3,19 @@
 ## 📘 Descrição do Projeto
 
 A **EcoWork API** é uma aplicação Java com Spring Boot que gerencia
-espaços de coworking sustentáveis.\
+espaços de coworking sustentáveis.
 Ela possibilita operações CRUD completas para gerenciamento de
 organizações, reservas, salas e dados relacionados.
 
 A API foi preparada para execução em **containers**, com deploy via
-**Azure Container Registry (ACR)** e **Azure Container Instances
-(ACI)**, além de conexão com um banco **PostgreSQL** executando também
+**Azure Container Registry (ACR)** e **Azure Container Instances (ACI)**, além de conexão com um banco **MySQL** executando também
 em container.
 
 ------------------------------------------------------------------------
 
 ## 🏗 Arquitetura do Projeto
 
+```
     ┌────────────────────────┐
     │        Front-end       │
     │ (React/Qualquer outro) │
@@ -30,10 +30,11 @@ em container.
                 |
                 v
     ┌──────────────────────────────┐
-    │     PostgreSQL Database      │
+    │     MySQL Database           │
     │ Container Docker / ACI       │
     │      Acesso Externo          │
     └──────────────────────────────┘
+```
 
 ### Componentes principais:
 
@@ -42,22 +43,22 @@ em container.
 -   **Docker**
 -   **ACR (Azure Container Registry)**
 -   **ACI (Azure Container Instances)**
--   **PostgreSQL**
+-   **MySQL**
 -   **Maven**
 
 ------------------------------------------------------------------------
 
 ## 🛠 Tecnologias Principais
 
-  Tecnologia    Função
-  ------------- ----------------------------
-  Java 17       Linguagem da API
-  Spring Boot   Framework principal
-  PostgreSQL    Banco de dados
-  Docker        Empacotamento da aplicação
-  Azure ACR     Armazenamento das imagens
-  Azure ACI     Execução dos containers
-  Maven         Build & dependências
+| Tecnologia    | Função                        |
+| ------------- | ----------------------------- |
+| Java 17       | Linguagem da API              |
+| Spring Boot   | Framework principal           |
+| MySQL         | Banco de dados                |
+| Docker        | Empacotamento da aplicação    |
+| Azure ACR     | Armazenamento das imagens     |
+| Azure ACI     | Execução dos containers       |
+| Maven         | Build & dependências          |
 
 ------------------------------------------------------------------------
 
@@ -65,7 +66,9 @@ em container.
 
 ### **Base URL exemplo:**
 
-    http://<dns-label>.westeurope.azurecontainer.io:8080
+```
+http://<dns-label>.eastus.azurecontainer.io:8080
+```
 
 ## 📌 1. Organizações
 
@@ -73,7 +76,7 @@ em container.
 
 **POST** `/organizacao`
 
-``` json
+```json
 {
   "nome": "Empresa XPTO",
   "responsavel": "João Silva",
@@ -102,49 +105,34 @@ em container.
 
 # 🛢 Variáveis necessárias (Azure DevOps Library)
 
-  -----------------------------------------------------------------------------------------------
-  Nome                    Descrição                      Exemplo
-  ----------------------- ------------------------------ ----------------------------------------
-  `POSTGRES_HOST`         Host do banco                  `meubanco.postgres.database.azure.com`
-
-  `POSTGRES_PORT`         Porta                          `5432`
-
-  `POSTGRES_DB`           Nome do banco                  `ecowork`
-
-  `POSTGRES_USER`         Usuário                        `admin`
-
-  `POSTGRES_PASSWORD`     Senha                          `S3nh@F0rte`
-
-  `ACR_NAME`              Nome do registry               `ecoworkregistry`
-
-  `ACR_LOGIN_SERVER`      URL do ACR                     `ecoworkregistry.azurecr.io`
-
-  `RESOURCE_GROUP`        Resource group do Azure        `rg-ecowork`
-
-  `ACI_DNS_LABEL`         DNS público do container       `ecoworkapi123`
-
-  `servicePrincipalId`    AppId do SPN                   \-
-
-  `servicePrincipalKey`   Secret do SPN                  \-
-
-  `tenantId`              Tenant ID                      \-
-  -----------------------------------------------------------------------------------------------
+| Nome                    | Descrição                      | Exemplo |
+| ----------------------- | ------------------------------ | ------- |
+| `MYSQL_HOST`            | Host do banco                  | `ecoworkdb.eastus.azurecontainer.io` |
+| `MYSQL_PORT`            | Porta                          | `3306` |
+| `MYSQL_DATABASE`        | Nome do banco                  | `ecoworkdb` |
+| `MYSQL_USER`            | Usuário                        | `ecowork-user` |
+| `MYSQL_PASSWORD`        | Senha                          | `ecoworkFIAP!` |
+| `ACR_NAME`              | Nome do registry               | `ecoworkacr` |
+| `RESOURCE_GROUP`        | Resource group do Azure        | `ecowork-rg` |
+| `ACI_DNS_LABEL`         | DNS público do container       | `ecowork-api` |
 
 ------------------------------------------------------------------------
 
-# 🗄 Como conectar no banco PostgreSQL
+# 🗄 Como conectar no banco MySQL
 
 ### 1. A partir do terminal
 
-    psql -h <POSTGRES_HOST> -p <POSTGRES_PORT> -U <POSTGRES_USER> -d <POSTGRES_DB>
+```bash
+mysql -h <MYSQL_HOST> -P <MYSQL_PORT> -u <MYSQL_USER> -p <MYSQL_DATABASE>
+```
 
 ### 2. De uma ferramenta como DBeaver
 
--   Host: `POSTGRES_HOST`
--   Port: `5432`
--   User: `POSTGRES_USER`
--   Password: `POSTGRES_PASSWORD`
--   Database: `POSTGRES_DB`
+- Host: `MYSQL_HOST`
+- Port: `MYSQL_PORT`
+- User: `MYSQL_USER`
+- Password: `MYSQL_PASSWORD`
+- Database: `MYSQL_DATABASE`
 
 Se o banco estiver em **container no Azure**, lembre-se de liberar a
 porta externamente.
@@ -155,11 +143,15 @@ porta externamente.
 
 Após o pipeline fazer o deploy no ACI, a URL exibida será:
 
-    http://$(ACI_DNS_LABEL).westeurope.azurecontainer.io:8080
+```
+http://${ACI_DNS_LABEL}.eastus.azurecontainer.io:8080
+```
 
 Exemplo real:
 
-    http://ecoworkapi123.westeurope.azurecontainer.io:8080/organizacao
+```
+http://ecowork-api.eastus.azurecontainer.io:8080/organizacao
+```
 
 ------------------------------------------------------------------------
 
@@ -167,24 +159,34 @@ Exemplo real:
 
 ## 1. Criar banco local
 
-``` bash
-docker run --name ecowork-db -e POSTGRES_PASSWORD=admin -e POSTGRES_DB=ecowork -p 5432:5432 -d postgres
+```bash
+docker run --name ecowork-db -e MYSQL_ROOT_PASSWORD=ecoworkFIAP! -e MYSQL_DATABASE=ecoworkdb -e MYSQL_USER=ecowork-user -e MYSQL_PASSWORD=ecoworkFIAP! -p 3306:3306 -d mysql:8.0
 ```
 
 ## 2. Rodar aplicação
 
-    mvn spring-boot:run
+```bash
+mvn spring-boot:run
+```
 
 ------------------------------------------------------------------------
 
 # 🔧 application.yaml completo
 
-``` yaml
+```yaml
+server:
+  port: 8080
+
 spring:
+  application:
+    name: ecowork-api
+
   datasource:
-    url: jdbc:postgresql://${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-    username: ${POSTGRES_USER}
-    password: ${POSTGRES_PASSWORD}
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:ecoworkdb}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MYSQL_USER:ecowork-user}
+    password: ${MYSQL_PASSWORD:ecoworkFIAP!}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -193,13 +195,32 @@ spring:
         format_sql: true
     show-sql: true
 
-server:
-  port: 8080
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    com.ecowork: DEBUG
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 ```
 
 ------------------------------------------------------------------------
 
 # 🚀 CI/CD com Azure Pipeline
 
-O pipeline: - Builda o Maven - Roda testes - Gera imagem Docker - Faz
-push pro ACR - Cria/atualiza o ACI - Exibe URL de acesso
+O pipeline realiza os seguintes passos:
+- Build com Maven
+- Roda testes
+- Gera imagem Docker da aplicação
+- Faz push da imagem para o ACR
+- Cria ou atualiza o container no ACI
+- Exibe a URL de acesso da aplicação
+
